@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
 app = Flask(__name__)
 messages = {}
+message_counters = {}
 EXPIRY_TIME = timedelta(days=1)
 @app.route("/send/<message_id>", methods=["POST"])
 def send_message(message_id):
@@ -23,5 +24,16 @@ def get_message(message_id):
         del messages[message_id]
         return jsonify({"error": "Message expired"}), 410
     return jsonify({"data": entry["data"]}), 200
+@app.route("/nextid", methods=["POST"])
+def get_next_id():
+    data = request.get_json()
+    if not data or "sender" not in data or "receiver" not in data:
+        return jsonify({"error": "Missing 'sender' or 'receiver'"}), 400
+    pair_key = data["sender"] + data["receiver"]
+    if pair_key not in message_counters:
+        message_counters[pair_key] = 0
+    message_counters[pair_key] += 1
+    next_id = f"{data['sender']}{data['receiver']}{message_counters[pair_key]}"
+    return jsonify({"id": next_id}), 200
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
