@@ -16,24 +16,32 @@ def hash_password(password: str, salt: bytes):
 def verify_password(stored_hash, salt, password_attempt):
     return stored_hash == hash_password(password_attempt, salt)
 
-def pair_key(sender, receiver):
-    return sender + receiver
+def get_user_publickey(username):
+    user = users.get(username)
+    return user["publickey"] if user else None
+
+def pair_key(sender_pk, receiver_pk):
+    return sender_pk + receiver_pk
 
 @app.route("/transfer/post/<message_id>", methods=["POST"])
 def send_message(message_id):
     data = request.get_json()
     if not data or "data" not in data or "sender" not in data or "receiver" not in data:
         return jsonify({"error": "Missing 'data', 'sender' or 'receiver'"}), 400
-    sender = data["sender"]
-    receiver = data["receiver"]
-    key = pair_key(sender, receiver)
+    sender_username = data["sender"]
+    receiver_username = data["receiver"]
+    sender_pk = get_user_publickey(sender_username)
+    receiver_pk = get_user_publickey(receiver_username)
+    if not sender_pk or not receiver_pk:
+        return jsonify({"error": "Sender or receiver username not found"}), 404
+    key = pair_key(sender_pk, receiver_pk)
     message_counters[key] = message_counters.get(key, 0) + 1
     msgcount = message_counters[key]
     messages[message_id] = {
         "data": data["data"],
         "timestamp": datetime.now(timezone.utc),
-        "sender": sender,
-        "receiver": receiver,
+        "sender": sender_username,
+        "receiver": receiver_username,
         "msgcount": msgcount
     }
     return jsonify({"status": "ok", "msgcount": msgcount}), 200
@@ -53,9 +61,15 @@ def get_next_id():
     data = request.get_json()
     if not data or "sender" not in data or "receiver" not in data:
         return jsonify({"error": "Missing 'sender' or 'receiver'"}), 400
-    key = pair_key(data["sender"], data["receiver"])
+    sender_username = data["sender"]
+    receiver_username = data["receiver"]
+    sender_pk = get_user_publickey(sender_username)
+    receiver_pk = get_user_publickey(receiver_username)
+    if not sender_pk or not receiver_pk:
+        return jsonify({"error": "Sender or receiver username not found"}), 404
+    key = pair_key(sender_pk, receiver_pk)
     count = message_counters.get(key, 0)
-    next_id = f"{data['sender']}{data['receiver']}{count + 1}"
+    next_id = f"{sender_pk}{receiver_pk}{count + 1}"
     return jsonify({"id": next_id}), 200
 
 @app.route("/user/create", methods=["POST"])
