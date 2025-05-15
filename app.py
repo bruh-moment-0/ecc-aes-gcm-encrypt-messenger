@@ -137,5 +137,9 @@ def user_remove():
     del users[username]
     return jsonify({"status": "user removed"}), 200
 
+@app.route("/")
+def index():
+    return send_from_directory("static", "index.html")
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
