@@ -1,5 +1,6 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from datetime import datetime, timedelta, timezone
+import os
 
 app = Flask(__name__)
 messages = {}
@@ -50,6 +51,10 @@ def get_next_id():
     count = message_counters.get(pair_key, 0)
     next_id = f"{data['sender']}{data['receiver']}{count + 1}"
     return jsonify({"id": next_id}), 200
+
+@app.route("/")
+def index():
+    return send_from_directory("static", "index.html")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
