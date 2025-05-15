@@ -21,7 +21,6 @@ def send_message(message_id):
         msgcount = message_counters[pair_key]
     else:
         return jsonify({"error": "Missing 'sender' or 'receiver'"}), 400
-    
     messages[message_id] = {
         "data": data["data"],
         "timestamp": datetime.now(timezone.utc),
@@ -48,10 +47,8 @@ def get_next_id():
     if not data or "sender" not in data or "receiver" not in data:
         return jsonify({"error": "Missing 'sender' or 'receiver'"}), 400
     pair_key = data["sender"] + data["receiver"]
-    if pair_key not in message_counters:
-        message_counters[pair_key] = 0
-    message_counters[pair_key] += 1
-    next_id = f"{data['sender']}{data['receiver']}{message_counters[pair_key]}"
+    count = message_counters.get(pair_key, 0)
+    next_id = f"{data['sender']}{data['receiver']}{count + 1}"
     return jsonify({"id": next_id}), 200
 
 if __name__ == "__main__":
