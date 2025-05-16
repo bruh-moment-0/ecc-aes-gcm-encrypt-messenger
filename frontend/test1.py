@@ -1,7 +1,7 @@
 import requests, base64, zlib, json, hashlib
 from urllib.parse import quote, unquote
 
-BASEURL = "https://msg-api-rjpr.onrender.com"
+BASEURL = "https://msg-api-w0oh.onrender.com"
 
 def compressencode(text):
     return base64.b64encode(zlib.compress(text.encode())).decode()
