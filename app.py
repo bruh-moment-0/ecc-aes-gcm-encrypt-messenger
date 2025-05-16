@@ -40,7 +40,6 @@ def get_msgcount(sender_pk, receiver_pk):
     return Message.query.filter_by(sender=sender_pk, receiver=receiver_pk).count()
 
 def generate_message_id(sender_pk, receiver_pk, count):
-    # SHA256 hash of concatenated sender_pk + receiver_pk + count
     raw = f"{sender_pk}{receiver_pk}{count}".encode()
     return hashlib.sha256(raw).hexdigest()
 
