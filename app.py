@@ -48,29 +48,16 @@ def send_message(message_id):
     data = request.get_json()
     if not data or "data" not in data or "sender" not in data or "receiver" not in data:
         return jsonify({"error": "Missing fields"}), 400
-
     sender = data["sender"]
     receiver = data["receiver"]
     sender_pk = get_user_publickey(sender)
     receiver_pk = get_user_publickey(receiver)
-
     if not sender_pk or not receiver_pk:
         return jsonify({"error": "Invalid usernames"}), 404
-
-    # Check if message_id already exists
     if Message.query.get(message_id):
         return jsonify({"error": "Message ID already exists"}), 409
-
     msgcount = get_msgcount(sender_pk, receiver_pk) + 1
-    msg = Message(
-        message_id=message_id,
-        data=data["data"],
-        timestamp=datetime.now(timezone.utc),
-        sender=sender_pk,
-        receiver=receiver_pk,
-        msgcount=msgcount
-    )
-
+    msg = Message(message_id=message_id,data=data["data"],timestamp=datetime.now(timezone.utc),sender=sender_pk,receiver=receiver_pk,msgcount=msgcount)
     db.session.add(msg)
     db.session.commit()
     return jsonify({"status": "ok", "msgcount": msgcount}), 200
@@ -80,12 +67,10 @@ def get_message(message_id):
     msg = Message.query.get(message_id)
     if not msg:
         return jsonify({"error": "Not found"}), 404
-
     if datetime.now(timezone.utc) - msg.timestamp > EXPIRY_TIME:
         db.session.delete(msg)
         db.session.commit()
         return jsonify({"error": "Expired"}), 410
-
     return jsonify({"data": msg.data, "msgcount": msg.msgcount}), 200
 
 @app.route("/transfer/nextid", methods=["POST"])
@@ -93,13 +78,10 @@ def get_next_id():
     data = request.get_json()
     if not data or "sender" not in data or "receiver" not in data:
         return jsonify({"error": "Missing fields"}), 400
-
     sender_pk = get_user_publickey(data["sender"])
     receiver_pk = get_user_publickey(data["receiver"])
-
     if not sender_pk or not receiver_pk:
         return jsonify({"error": "Invalid usernames"}), 404
-
     count = get_msgcount(sender_pk, receiver_pk) + 1
     msgid = generate_message_id(sender_pk, receiver_pk, count)
     return jsonify({"id": msgid}), 200
@@ -109,20 +91,11 @@ def user_create():
     data = request.get_json()
     if not data or "username" not in data or "publickey" not in data or "password" not in data:
         return jsonify({"error": "Missing fields"}), 400
-
     if User.query.get(data["username"]):
         return jsonify({"error": "User exists"}), 409
-
     salt = os.urandom(16)
     hash_ = hash_password(data["password"], salt)
-    user = User(
-        username=data["username"],
-        publickey=data["publickey"],
-        salt=base64.b64encode(salt).decode(),
-        pass_hash=base64.b64encode(hash_).decode(),
-        created_at=datetime.now(timezone.utc).isoformat()
-    )
-
+    user = User(username=data["username"],publickey=data["publickey"],salt=base64.b64encode(salt).decode(),pass_hash=base64.b64encode(hash_).decode(),created_at=datetime.now(timezone.utc).isoformat())
     db.session.add(user)
     db.session.commit()
     return jsonify({"status": "user created"}), 201
@@ -132,33 +105,23 @@ def user_get():
     data = request.get_json()
     if not data or "username" not in data:
         return jsonify({"error": "Missing username"}), 400
-
     user = User.query.get(data["username"])
     if not user:
         return jsonify({"error": "User not found"}), 404
-
-    return jsonify({
-        "username": user.username,
-        "publickey": user.publickey,
-        "created_at": user.created_at
-    }), 200
+    return jsonify({"username": user.username,"publickey": user.publickey,"created_at": user.created_at}), 200
 
 @app.route("/user/change", methods=["POST"])
 def user_change():
     data = request.get_json()
     if not data or "username" not in data or "password" not in data or "new_publickey" not in data:
         return jsonify({"error": "Missing fields"}), 400
-
     user = User.query.get(data["username"])
     if not user:
         return jsonify({"error": "User not found"}), 404
-
     salt = base64.b64decode(user.salt)
     hash_ = base64.b64decode(user.pass_hash)
-
     if not verify_password(hash_, salt, data["password"]):
         return jsonify({"error": "Invalid password"}), 403
-
     user.publickey = data["new_publickey"]
     db.session.commit()
     return jsonify({"status": "publickey updated"}), 200
@@ -168,17 +131,13 @@ def user_remove():
     data = request.get_json()
     if not data or "username" not in data or "password" not in data:
         return jsonify({"error": "Missing fields"}), 400
-
     user = User.query.get(data["username"])
     if not user:
         return jsonify({"error": "User not found"}), 404
-
     salt = base64.b64decode(user.salt)
     hash_ = base64.b64decode(user.pass_hash)
-
     if not verify_password(hash_, salt, data["password"]):
         return jsonify({"error": "Invalid password"}), 403
-
     db.session.delete(user)
     db.session.commit()
     return jsonify({"status": "user removed"}), 200
@@ -187,5 +146,5 @@ def user_remove():
 def index():
     return send_from_directory("static", "index.html")
 
-if __name__ == "__main__":
+if __name__=="__main__":
     app.run(host="0.0.0.0", port=5000)
