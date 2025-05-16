@@ -1,22 +1,26 @@
-import requests, base64, zlib, json
+import requests, base64, zlib, json, hashlib
 from urllib.parse import quote, unquote
 
 BASEURL = "https://msg-api-rjpr.onrender.com"
 
-def text2base64(text):
-    return base64.b64encode(text.encode()).decode()
-
 def compressencode(text):
-    return base64.b64encode(zlib.compress(text.encode('utf-8'))).decode('utf-8')
+    return base64.b64encode(zlib.compress(text.encode())).decode()
 
 def compressdecode(text64):
-    return zlib.decompress(base64.b64decode(text64.encode('utf-8'))).decode('utf-8')
+    return zlib.decompress(base64.b64decode(text64.encode())).decode()
 
-def msgidgen(sender_username, receiver_username):
-    response = requests.post(f"{BASEURL}/transfer/nextid", json={"sender": sender_username, "receiver": receiver_username})
-    if response.status_code == 200:
-        return quote(compressencode(response.json()["id"]))
-    return None
+def generate_msgid(sender_username, receiver_username):
+    r1 = requests.post(f"{BASEURL}/user/get", json={"username": sender_username})
+    r2 = requests.post(f"{BASEURL}/user/get", json={"username": receiver_username})
+    if r1.status_code != 200 or r2.status_code != 200:
+        return None
+    sender_pk = json.loads(r1.text)["publickey"]
+    receiver_pk = json.loads(r2.text)["publickey"]
+    r = requests.post(f"{BASEURL}/transfer/nextid", json={"sender": sender_username, "receiver": receiver_username})
+    if r.status_code != 200:
+        return None
+    msgid = r.json()["id"]
+    return quote(msgid)
 
 def sendmsg(msgid, sender_username, receiver_username, data):
     url = f"{BASEURL}/transfer/post/{msgid}"
@@ -24,19 +28,16 @@ def sendmsg(msgid, sender_username, receiver_username, data):
     r = requests.post(url, json=payload)
     return r.status_code == 200, r.status_code, r.text
 
-def getmsgsub(msgid):
-    r = requests.get(f"{BASEURL}/transfer/get/{msgid}")
-    return r.status_code == 200, r.status_code, r.text
-
 def getmsg(msgid):
-    ok, code, text = getmsgsub(msgid)
-    if ok:
-        try:
-            data = compressdecode(unquote(json.loads(text)["data"]))
-            return True, code, data
-        except Exception as e:
-            return False, code, f"decode error: {e}"
-    return False, code, text
+    r = requests.get(f"{BASEURL}/transfer/get/{msgid}")
+    if r.status_code != 200:
+        return False, r.status_code, r.text
+    try:
+        data_encoded = json.loads(r.text)["data"]
+        data = compressdecode(unquote(data_encoded))
+        return True, r.status_code, data
+    except Exception as e:
+        return False, r.status_code, f"decode error: {e}"
 
 def user_create(username, publickey, password):
     r = requests.post(f"{BASEURL}/user/create", json={"username": username, "publickey": publickey, "password": password})
@@ -65,7 +66,6 @@ def menu():
         print("6) Send Message")
         print("7) Get Message")
         print("0) Exit")
-
         choice = input("Choice: ").strip()
         if choice == "1":
             u = input("Username: ")
@@ -91,7 +91,7 @@ def menu():
         elif choice == "5":
             s = input("Sender Username: ")
             r = input("Receiver Username: ")
-            mid = msgidgen(s, r)
+            mid = generate_msgid(s, r)
             print("Generated Message ID:", mid)
         elif choice == "6":
             mid = input("Message ID: ")
