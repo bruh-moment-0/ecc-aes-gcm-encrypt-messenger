@@ -67,7 +67,11 @@ def get_message(message_id):
     msg = Message.query.get(message_id)
     if not msg:
         return jsonify({"error": "Not found"}), 404
-    if datetime.now(timezone.utc) - msg.timestamp > EXPIRY_TIME:
+    now = datetime.now(timezone.utc)
+    msg_time = msg.timestamp
+    if msg_time.tzinfo is None:
+        msg_time = msg_time.replace(tzinfo=timezone.utc)
+    if now - msg_time > EXPIRY_TIME:
         db.session.delete(msg)
         db.session.commit()
         return jsonify({"error": "Expired"}), 410
