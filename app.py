@@ -135,6 +135,21 @@ def user_get():
         return jsonify({"error": "User not found"}), 404
     return jsonify({"username": user.username,"publickey": user.publickey,"created_at": user.created_at}), 200
 
+@app.route("/user/login", methods=["POST"])
+def user_login():
+    data = request.get_json()
+    if not data or "username" not in data or "password" not in data:
+        return jsonify({"error": "Missing username or password"}), 400
+    user = User.query.get(data["username"])
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    salt = base64.b64decode(user.salt)
+    stored_hash = base64.b64decode(user.pass_hash)
+    if verify_password(stored_hash, salt, data["password"]):
+        return jsonify({"status": "login successful", "username": user.username}), 200
+    else:
+        return jsonify({"error": "Invalid password"}), 403
+
 @app.route("/user/change", methods=["POST"])
 def user_change():
     data = request.get_json()
