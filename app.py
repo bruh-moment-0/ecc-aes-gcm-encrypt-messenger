@@ -20,7 +20,7 @@ class User(db.Model):
 class Message(db.Model):
     message_id = db.Column(db.String, primary_key=True)
     data = db.Column(db.Text, nullable=False)
-    timestamp = db.Column(db.DateTime, nullable=False)
+    timestamp = db.Column(db.DateTime(timezone=True), nullable=False)  # <-- updated here
     sender = db.Column(db.String, nullable=False)
     receiver = db.Column(db.String, nullable=False)
     msgcount = db.Column(db.Integer, nullable=False)
@@ -34,9 +34,6 @@ def verify_password(stored_hash, salt, attempt):
 def get_user_publickey(username):
     user = User.query.filter_by(username=username).first()
     return user.publickey if user else None
-
-def pair_key(sender_pk, receiver_pk):
-    return sender_pk + receiver_pk
 
 def get_msgcount(sender_pk, receiver_pk):
     return Message.query.filter_by(sender=sender_pk, receiver=receiver_pk).count()
@@ -75,7 +72,8 @@ def get_message(message_id):
     if not msg:
         return jsonify({"error": "Not found"}), 404
 
-    if datetime.now(timezone.utc) - msg.timestamp > EXPIRY_TIME:
+    ts = msg.timestamp.replace(tzinfo=timezone.utc)  # <-- patch to fix timezone error
+    if datetime.now(timezone.utc) - ts > EXPIRY_TIME:
         db.session.delete(msg)
         db.session.commit()
         return jsonify({"error": "Expired"}), 410
@@ -180,7 +178,5 @@ def user_remove():
 def index():
     return send_from_directory("static", "index.html")
 
-if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()
+if __name__ == "__main__":)
     app.run(host="0.0.0.0", port=5000)
