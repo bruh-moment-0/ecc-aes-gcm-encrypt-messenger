@@ -90,6 +90,27 @@ def get_next_id():
     msgid = generate_message_id(sender_pk, receiver_pk, count)
     return jsonify({"id": msgid}), 200
 
+@app.route("/transfer/get/latest", methods=["POST"])
+def get_latest_message():
+    data = request.get_json()
+    if not data or "sender" not in data or "receiver" not in data:
+        return jsonify({"error": "Missing fields"}), 400
+    sender_pk = get_user_publickey(data["sender"])
+    receiver_pk = get_user_publickey(data["receiver"])
+    if not sender_pk or not receiver_pk:
+        return jsonify({"error": "Invalid usernames"}), 404
+    msgs = Message.query.filter_by(sender=sender_pk, receiver=receiver_pk).order_by(Message.msgcount.desc()).first()
+    if not msgs:
+        return jsonify({"error": "No messages found"}), 404
+    now = datetime.now(timezone.utc)
+    if msgs.timestamp.tzinfo is None:
+        msgs.timestamp = msgs.timestamp.replace(tzinfo=timezone.utc)
+    if now - msgs.timestamp > EXPIRY_TIME:
+        db.session.delete(msgs)
+        db.session.commit()
+        return jsonify({"error": "Expired"}), 410
+    return jsonify({"data": msgs.data, "msgcount": msgs.msgcount}), 200
+
 @app.route("/user/create", methods=["POST"])
 def user_create():
     data = request.get_json()
