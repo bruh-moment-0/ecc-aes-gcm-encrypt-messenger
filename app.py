@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta, timezone
-import os, hashlib, base64
+import os, hashlib, base64, hmac
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:///app.db")
@@ -20,7 +20,7 @@ class User(db.Model):
 class Message(db.Model):
     message_id = db.Column(db.String, primary_key=True)
     data = db.Column(db.Text, nullable=False)
-    timestamp = db.Column(db.DateTime(timezone=True), nullable=False)  # <-- updated here
+    timestamp = db.Column(db.DateTime(timezone=True), nullable=False)
     sender = db.Column(db.String, nullable=False)
     receiver = db.Column(db.String, nullable=False)
     msgcount = db.Column(db.Integer, nullable=False)
@@ -29,14 +29,20 @@ def hash_password(password, salt):
     return hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 100_000)
 
 def verify_password(stored_hash, salt, attempt):
-    return stored_hash == hash_password(attempt, salt)
+    attempt_hash = hash_password(attempt, salt)
+    return hmac.compare_digest(stored_hash, attempt_hash)
 
 def get_user_publickey(username):
-    user = User.query.filter_by(username=username).first()
+    user = User.query.get(username)
     return user.publickey if user else None
 
 def get_msgcount(sender_pk, receiver_pk):
     return Message.query.filter_by(sender=sender_pk, receiver=receiver_pk).count()
+
+def generate_message_id(sender_pk, receiver_pk, count):
+    # SHA256 hash of concatenated sender_pk + receiver_pk + count
+    raw = f"{sender_pk}{receiver_pk}{count}".encode()
+    return hashlib.sha256(raw).hexdigest()
 
 @app.route("/transfer/post/<message_id>", methods=["POST"])
 def send_message(message_id):
@@ -52,13 +58,17 @@ def send_message(message_id):
     if not sender_pk or not receiver_pk:
         return jsonify({"error": "Invalid usernames"}), 404
 
+    # Check if message_id already exists
+    if Message.query.get(message_id):
+        return jsonify({"error": "Message ID already exists"}), 409
+
     msgcount = get_msgcount(sender_pk, receiver_pk) + 1
     msg = Message(
         message_id=message_id,
         data=data["data"],
         timestamp=datetime.now(timezone.utc),
-        sender=sender,
-        receiver=receiver,
+        sender=sender_pk,
+        receiver=receiver_pk,
         msgcount=msgcount
     )
 
@@ -72,8 +82,7 @@ def get_message(message_id):
     if not msg:
         return jsonify({"error": "Not found"}), 404
 
-    ts = msg.timestamp.replace(tzinfo=timezone.utc)  # <-- patch to fix timezone error
-    if datetime.now(timezone.utc) - ts > EXPIRY_TIME:
+    if datetime.now(timezone.utc) - msg.timestamp > EXPIRY_TIME:
         db.session.delete(msg)
         db.session.commit()
         return jsonify({"error": "Expired"}), 410
@@ -92,8 +101,9 @@ def get_next_id():
     if not sender_pk or not receiver_pk:
         return jsonify({"error": "Invalid usernames"}), 404
 
-    count = get_msgcount(sender_pk, receiver_pk)
-    return jsonify({"id": f"{sender_pk}{receiver_pk}{count+1}"}), 200
+    count = get_msgcount(sender_pk, receiver_pk) + 1
+    msgid = generate_message_id(sender_pk, receiver_pk, count)
+    return jsonify({"id": msgid}), 200
 
 @app.route("/user/create", methods=["POST"])
 def user_create():
