@@ -25,6 +25,7 @@ class Message(db.Model):
     receiver = db.Column(db.String, nullable=False)
     msgcount = db.Column(db.Integer, nullable=False)
     format_version = db.Column(db.Integer, nullable=False, default=1)  # For future format changes
+    message_type = db.Column(db.String, nullable=False, default='message')  # Add message type support
 
 def hash_password(password, salt):
     return hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 100_000)
@@ -64,6 +65,9 @@ def send_message(message_id):
     # Replace newlines with a special marker
     message_data = message_data.replace('\n', '\\n')
     
+    # Get message type from data if it exists
+    message_type = data.get("message_type", "message")
+    
     msg = Message(
         message_id=message_id,
         data=message_data,
@@ -71,7 +75,8 @@ def send_message(message_id):
         sender=sender_pk,
         receiver=receiver_pk,
         msgcount=msgcount,
-        format_version=1
+        format_version=1,
+        message_type=message_type
     )
     db.session.add(msg)
     db.session.commit()
