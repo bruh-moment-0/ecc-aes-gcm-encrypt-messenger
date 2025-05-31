@@ -24,6 +24,7 @@ class Message(db.Model):
     sender = db.Column(db.String, nullable=False)
     receiver = db.Column(db.String, nullable=False)
     msgcount = db.Column(db.Integer, nullable=False)
+    format_version = db.Column(db.Integer, nullable=False, default=1)  # For future format changes
 
 def hash_password(password, salt):
     return hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 100_000)
@@ -57,7 +58,21 @@ def send_message(message_id):
     if Message.query.get(message_id):
         return jsonify({"error": "Message ID already exists"}), 409
     msgcount = get_msgcount(sender_pk, receiver_pk) + 1
-    msg = Message(message_id=message_id,data=data["data"],timestamp=datetime.now(timezone.utc),sender=sender_pk,receiver=receiver_pk,msgcount=msgcount)
+    
+    # Process message data to handle newlines
+    message_data = data["data"]
+    # Replace newlines with a special marker
+    message_data = message_data.replace('\n', '\\n')
+    
+    msg = Message(
+        message_id=message_id,
+        data=message_data,
+        timestamp=datetime.now(timezone.utc),
+        sender=sender_pk,
+        receiver=receiver_pk,
+        msgcount=msgcount,
+        format_version=1
+    )
     db.session.add(msg)
     db.session.commit()
     return jsonify({"status": "ok", "msgcount": msgcount}), 200
@@ -75,7 +90,17 @@ def get_message(message_id):
         db.session.delete(msg)
         db.session.commit()
         return jsonify({"error": "Expired"}), 410
-    return jsonify({"data": msg.data, "msgcount": msg.msgcount}), 200
+    
+    # Process message data to restore newlines
+    message_data = msg.data
+    # Replace marker with newlines
+    message_data = message_data.replace('\\n', '\n')
+    
+    return jsonify({
+        "data": message_data,
+        "msgcount": msg.msgcount,
+        "format_version": msg.format_version
+    }), 200
 
 @app.route("/transfer/get/latest", methods=["POST"])
 def get_latest_message():
@@ -96,7 +121,17 @@ def get_latest_message():
         db.session.delete(msgs)
         db.session.commit()
         return jsonify({"error": "Expired"}), 410
-    return jsonify({"data": msgs.data, "msgcount": msgs.msgcount}), 200
+    
+    # Process message data to restore newlines
+    message_data = msgs.data
+    # Replace marker with newlines
+    message_data = message_data.replace('\\n', '\n')
+    
+    return jsonify({
+        "data": message_data,
+        "msgcount": msgs.msgcount,
+        "format_version": msgs.format_version
+    }), 200
 
 @app.route("/transfer/nextid", methods=["POST"])
 def get_next_id():
